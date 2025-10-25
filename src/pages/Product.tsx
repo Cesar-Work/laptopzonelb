@@ -13,13 +13,12 @@ export default function Product() {
 
   useEffect(() => {
     if (!slug) return
-    fetchBySlug(slug).then((res) => {
+    fetchBySlug(slug).then((res: LaptopProduct | null) => {
       setP(res)
       setLoading(false)
     })
   }, [slug])
 
-  // États d’options (première option disponible par défaut)
   const [ram, setRam] = useState<number | null>(null)
   const [storage, setStorage] = useState<number | null>(null)
 
@@ -79,54 +78,36 @@ export default function Product() {
               <Spec k="Storage type" v={p.storageType} />
             </div>
 
-            {/* Personnalisation */}
             <div className="glass rounded-2xl p-4">
               <div className="font-medium mb-2">Customize</div>
               <div className="flex flex-wrap gap-6">
-                {/* RAM */}
                 {p.ramOptions?.length ? (
                   <div>
                     <div className="text-sm text-white/60 mb-1">RAM</div>
                     <div className="flex flex-wrap gap-2">
-                      {p.ramOptions
-                        .filter((o) => o.available)
-                        .map((o) => (
-                          <button
-                            key={o.sizeGB}
-                            onClick={() => setRam(o.sizeGB)}
-                            className={btnCls(ram === o.sizeGB)}
-                          >
-                            {o.sizeGB} GB {o.priceDeltaUSD ? `(+$${o.priceDeltaUSD})` : ""}
-                          </button>
-                        ))}
+                      {p.ramOptions.filter(o=>o.available).map((o)=>(
+                        <button key={o.sizeGB} onClick={()=>setRam(o.sizeGB)} className={btnCls(ram===o.sizeGB)}>
+                          {o.sizeGB} GB {o.priceDeltaUSD ? `(+$${o.priceDeltaUSD})` : ""}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ) : null}
 
-                {/* Storage */}
                 {p.storageOptions?.length ? (
                   <div>
                     <div className="text-sm text-white/60 mb-1">Storage</div>
                     <div className="flex flex-wrap gap-2">
-                      {p.storageOptions
-                        .filter((o) => o.available)
-                        .map((o) => (
-                          <button
-                            key={o.sizeGB}
-                            onClick={() => setStorage(o.sizeGB)}
-                            className={btnCls(storage === o.sizeGB)}
-                          >
-                            {o.sizeGB} GB {o.priceDeltaUSD ? `(+$${o.priceDeltaUSD})` : ""}
-                          </button>
-                        ))}
+                      {p.storageOptions.filter(o=>o.available).map((o)=>(
+                        <button key={o.sizeGB} onClick={()=>setStorage(o.sizeGB)} className={btnCls(storage===o.sizeGB)}>
+                          {o.sizeGB} GB {o.priceDeltaUSD ? `(+$${o.priceDeltaUSD})` : ""}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ) : null}
               </div>
-
-              <p className="text-xs text-white/50 mt-2">
-                Selected: {ram ?? "—"} GB RAM, {storage ?? "—"} GB storage.
-              </p>
+              <p className="text-xs text-white/50 mt-2">Selected: {ram ?? "—"} GB RAM, {storage ?? "—"} GB storage.</p>
             </div>
 
             <ActionButtons buttons={p.customButtons} />

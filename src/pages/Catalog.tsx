@@ -11,7 +11,7 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchAllProducts().then((data) => {
+    fetchAllProducts().then((data: LaptopProduct[]) => {
       setItems(data)
       setLoading(false)
     })
