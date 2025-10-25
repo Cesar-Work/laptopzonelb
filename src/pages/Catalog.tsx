@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import ProductCard from "@/components/ProductCard"
 import { useStore } from "@/store"
-import { fetchAllProducts } from "@/data/useProducts"
+import { fetchAllProducts } from "@/data/useproducts"
 import type { LaptopProduct } from "@/types"
 
 export default function Catalog() {
