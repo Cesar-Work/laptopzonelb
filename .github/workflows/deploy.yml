@@ -3,12 +3,14 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]   # change if your default branch is different
+    branches: [ main ]
+
+permissions:
+  contents: write   # <-- needed to push to gh-pages
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +27,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      # <<< create CNAME and (optionally) .nojekyll BEFORE deploying >>>
       - name: Add CNAME and .nojekyll
         run: |
           echo "laptopzonelb.store" > ./dist/CNAME
