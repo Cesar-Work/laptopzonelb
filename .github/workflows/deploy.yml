@@ -1,42 +1,72 @@
-# .github/workflows/deploy.yml
 name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
-  contents: write   # <-- needed to push to gh-pages
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+env:
+  CUSTOM_DOMAIN: laptopzonelb.store
+  # si tu avais déjà un build configuré pour un sous-chemin de repo (ex: /LaptopZoneLB/)
+  # mets-le ici pour réécriture automatique ; sinon laisse vide:
+  OLD_REPO_BASE: /LaptopZoneLB/
 
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install
+      - name: Install deps
         run: npm ci
 
-      - name: Build
+      - name: Build (Vite)
         run: npm run build
 
-      - name: Add CNAME and .nojekyll
+      # --- Safety net : remet les liens d'assets à la racine si un ancien base path traîne ---
+      - name: Normalize asset base to root
         run: |
-          echo "laptopzonelb.store" > ./dist/CNAME
-          touch ./dist/.nojekyll
+          if [ -n "${OLD_REPO_BASE}" ] && grep -q "${OLD_REPO_BASE}" dist/index.html; then
+            echo "Found ${OLD_REPO_BASE} in HTML. Normalizing to root '/'."
+            find dist -type f -name "*.html" -print0 | xargs -0 sed -i "s|${OLD_REPO_BASE}|/|g"
+          else
+            echo "No old repo base found. Skipping normalization."
+          fi
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Add CNAME, 404.html, .nojekyll
+        run: |
+          echo "${CUSTOM_DOMAIN}" > dist/CNAME
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./dist
-          user_name: "github-actions[bot]"
-          user_email: "github-actions[bot]@users.noreply.github.com"
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
