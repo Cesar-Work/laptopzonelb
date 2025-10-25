@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import ProductCard from "@/components/ProductCard"
 import { useStore } from "@/store"
 import { fetchAllProducts } from "@/data/useproducts"
@@ -47,7 +47,7 @@ export default function Catalog() {
         </div>
 
         {loading ? (
-          <div className="mt-8 text-white/70">Loading catalog…</div>
+          <div className="mt-8 text-white/70">Loading catalogâ€¦</div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
             {filtered.map((p) => (

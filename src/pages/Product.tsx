@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom"
+﻿import { useParams } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { fetchBySlug } from "@/data/useproducts"
 import Product3D from "@/components/Product3D"
@@ -38,7 +38,7 @@ export default function Product() {
   }, [p, ram, storage])
 
   if (loading || !p) {
-    return <main className="p-6 mx-auto max-w-7xl">Loading…</main>
+    return <main className="p-6 mx-auto max-w-7xl">Loadingâ€¦</main>
   }
 
   const finalPrice = p.basePriceUSD + priceDelta
@@ -107,7 +107,7 @@ export default function Product() {
                   </div>
                 ) : null}
               </div>
-              <p className="text-xs text-white/50 mt-2">Selected: {ram ?? "—"} GB RAM, {storage ?? "—"} GB storage.</p>
+              <p className="text-xs text-white/50 mt-2">Selected: {ram ?? "â€”"} GB RAM, {storage ?? "â€”"} GB storage.</p>
             </div>
 
             <ActionButtons buttons={p.customButtons} />
