@@ -1,11 +1,18 @@
+// src/pages/Admin.tsx
 import { useEffect, useState } from "react"
 import { auth, db } from "@/lib/firebase"
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth"
-import { collection, addDoc, doc, updateDoc } from "firebase/firestore"
+import {
+  collection, addDoc, doc, updateDoc, getDoc, serverTimestamp
+} from "firebase/firestore"
 import type { LaptopProduct, RamOption, StorageOption } from "@/types"
 
 export default function Admin() {
   const [user, setUser] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const [form, setForm] = useState<Partial<LaptopProduct>>({
     brand: "Dell",
     title: "",
@@ -21,40 +28,101 @@ export default function Admin() {
     storageOptions: [{ sizeGB: 256, priceDeltaUSD: 0, available: true }],
   })
 
-  useEffect(() => onAuthStateChanged(auth, setUser), [])
+  // Auth + check admin
+  useEffect(() => {
+    return onAuthStateChanged(auth, async (u) => {
+      setUser(u)
+      setError(null)
+      if (!u) { setIsAdmin(false); return }
+      try {
+        const adm = await getDoc(doc(db, "admins", u.uid))
+        const active = adm.exists() && adm.data()?.active === true
+        setIsAdmin(active)
+        console.log("[admin-check]", u.uid, "isAdmin:", active)
+      } catch (e: any) {
+        console.error("[admin-check] failed:", e)
+        setError("Admin check failed: " + (e.message || e.code))
+        setIsAdmin(false)
+      }
+    })
+  }, [])
 
   async function login(e: any) {
     e.preventDefault()
+    setError(null)
     const email = e.target.email.value
     const pass = e.target.password.value
-    await signInWithEmailAndPassword(auth, email, pass)
+    try {
+      await signInWithEmailAndPassword(auth, email, pass)
+    } catch (e: any) {
+      console.error(e)
+      setError("Login failed: " + (e.message || e.code))
+      alert("Login failed: " + (e.message || e.code))
+    }
   }
-  async function logout() {
-    await signOut(auth)
-  }
+  async function logout() { await signOut(auth) }
 
   async function addProduct() {
-    if (!form.slug || !form.title) return alert("slug et title requis")
-    const payload: any = { ...form }
-    // valeur par défaut au cas où
-    payload.basePriceUSD = Number(payload.basePriceUSD || 0)
-    payload.specs = payload.specs || []
-    payload.ramOptions = (payload.ramOptions || []).map(normalizeOpt)
-    payload.storageOptions = (payload.storageOptions || []).map(normalizeOpt)
+    try {
+      setSaving(true)
+      setError(null)
 
-    const res = await addDoc(collection(db, "products"), payload)
-    await updateDoc(doc(db, "products", res.id), { id: res.id })
-    alert("Product added: " + res.id)
+      if (!auth.currentUser) {
+        alert("You must sign in first."); return
+      }
+      if (!isAdmin) {
+        alert(`You are signed in (UID ${auth.currentUser.uid}) but not an admin.
+Create Firestore doc: admins/${auth.currentUser.uid} = { active: true }`);
+        return
+      }
+      if (!form.slug || !form.title) {
+        alert("slug et title requis"); return
+      }
+
+      const payload: any = { ...form }
+      // normalisation
+      payload.slug = String(payload.slug)
+        .toLowerCase().replace(/[^a-z0-9\- ]/g, "").replace(/\s+/g, "-")
+      payload.basePriceUSD = Number(payload.basePriceUSD || 0)
+      payload.specs = payload.specs || []
+      payload.ramOptions = (payload.ramOptions || []).map(normalizeOpt)
+      payload.storageOptions = (payload.storageOptions || []).map(normalizeOpt)
+      payload.createdAt = serverTimestamp()
+      payload.updatedAt = serverTimestamp()
+
+      console.log("[addProduct] payload:", payload)
+
+      const res = await addDoc(collection(db, "products"), payload)
+      await updateDoc(doc(db, "products", res.id), { id: res.id, updatedAt: serverTimestamp() })
+      alert("Product added ✅ ID: " + res.id)
+    } catch (e: any) {
+      console.error("[addProduct] failed:", e)
+      setError("Save failed: " + (e.message || e.code || e))
+      alert("Save failed: " + (e.message || e.code || e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return !user ? (
-    <LoginForm onSubmit={login} />
+    <LoginForm onSubmit={login} error={error} />
   ) : (
     <main className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <div className="text-xs opacity-60">
+            UID: {user?.uid} · email: {user?.email || "n/a"} · isAdmin: {String(isAdmin)}
+          </div>
+        </div>
         <button onClick={logout} className="px-3 py-2 rounded bg-white text-black">Logout</button>
       </div>
+
+      {!isAdmin && (
+        <div className="text-red-400">
+          Not admin. Create Firestore doc <code>admins/{user.uid}</code> with <code>{`{ active: true }`}</code>.
+        </div>
+      )}
 
       <section className="glass p-4 rounded-2xl space-y-3">
         <Field label="Title">
@@ -87,7 +155,7 @@ export default function Admin() {
             <input type="number" className="bg-white/5 p-2 rounded"
               value={form.basePriceUSD || 0} onChange={(e) => setForm({ ...form, basePriceUSD: +e.target.value })} />
           </Field>
-          <Field label="Thumbnail (/assets/xxx.png ou URL)">
+          <Field label="Thumbnail (/assets/xxx.png or URL)">
             <input className="bg-white/5 p-2 rounded"
               value={form.thumbnail || ""} onChange={(e) => setForm({ ...form, thumbnail: e.target.value })} />
           </Field>
@@ -109,15 +177,22 @@ export default function Admin() {
           placeholderSize="GB"
         />
 
-        <button onClick={addProduct} className="px-3 py-2 rounded bg-neon text-black font-semibold">
-          Save product
+        <button
+          type="button"
+          onClick={addProduct}
+          disabled={!isAdmin || saving}
+          className="px-3 py-2 rounded bg-neon text-black font-semibold disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save product"}
         </button>
+
+        {error && <div className="text-red-400 text-sm">{error}</div>}
       </section>
     </main>
   )
 }
 
-function LoginForm({ onSubmit }: { onSubmit: (e: any) => void }) {
+function LoginForm({ onSubmit, error }: { onSubmit: (e: any) => void; error?: string | null }) {
   return (
     <main className="p-6 max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-4">Admin Login</h1>
@@ -126,6 +201,7 @@ function LoginForm({ onSubmit }: { onSubmit: (e: any) => void }) {
         <input name="password" type="password" className="w-full bg-white/5 p-2 rounded" placeholder="Password" />
         <button className="px-3 py-2 rounded bg-white text-black">Sign in</button>
       </form>
+      {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
     </main>
   )
 }
@@ -148,50 +224,25 @@ function OptionsEditor<T extends { sizeGB: number; priceDeltaUSD: number; availa
       <div className="font-medium mb-1">{title}</div>
       {items.map((o, idx) => (
         <div key={idx} className="flex flex-wrap gap-2 mb-2">
-          <input
-            type="number"
-            className="w-24 bg-white/5 p-2 rounded"
-            value={o.sizeGB}
-            onChange={(e) => {
-              const v = [...items]; v[idx] = { ...o, sizeGB: +e.target.value } as T; setItems(v)
-            }}
-            placeholder={placeholderSize}
-          />
-          <input
-            type="number"
-            className="w-28 bg-white/5 p-2 rounded"
-            value={o.priceDeltaUSD}
-            onChange={(e) => {
-              const v = [...items]; v[idx] = { ...o, priceDeltaUSD: +e.target.value } as T; setItems(v)
-            }}
-            placeholder="+$"
-          />
+          <input type="number" className="w-24 bg-white/5 p-2 rounded" value={o.sizeGB}
+            onChange={(e) => { const v = [...items]; v[idx] = { ...o, sizeGB: +e.target.value } as T; setItems(v) }}
+            placeholder={placeholderSize} />
+          <input type="number" className="w-28 bg-white/5 p-2 rounded" value={o.priceDeltaUSD}
+            onChange={(e) => { const v = [...items]; v[idx] = { ...o, priceDeltaUSD: +e.target.value } as T; setItems(v) }}
+            placeholder="+$" />
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={o.available}
-              onChange={(e) => {
-                const v = [...items]; v[idx] = { ...o, available: e.target.checked } as T; setItems(v)
-              }}
-            />
+            <input type="checkbox" checked={o.available}
+              onChange={(e) => { const v = [...items]; v[idx] = { ...o, available: e.target.checked } as T; setItems(v) }} />
             available
           </label>
-          <button
-            type="button"
-            className="px-2 rounded bg-white/10"
-            onClick={() => {
-              const v = [...items]; v.splice(idx, 1); setItems(v)
-            }}
-          >
+          <button type="button" className="px-2 rounded bg-white/10"
+            onClick={() => { const v = [...items]; v.splice(idx, 1); setItems(v) }}>
             remove
           </button>
         </div>
       ))}
-      <button
-        type="button"
-        className="px-2 py-1 rounded bg-white text-black text-sm"
-        onClick={() => setItems([...items, { sizeGB: 8, priceDeltaUSD: 0, available: true } as T])}
-      >
+      <button type="button" className="px-2 py-1 rounded bg-white text-black text-sm"
+        onClick={() => setItems([...items, { sizeGB: 8, priceDeltaUSD: 0, available: true } as T])}>
         + add option
       </button>
     </div>
@@ -206,3 +257,4 @@ function normalizeOpt<T extends { sizeGB: any; priceDeltaUSD: any; available: an
     available: Boolean(o.available),
   }
 }
+
