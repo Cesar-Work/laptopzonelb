@@ -6,6 +6,7 @@ import App from "./pages/App"
 import Catalog from "./pages/Catalog"
 import Product from "./pages/Product"
 import Admin from "./pages/Admin"
+import Advisor from "./pages/Advisor"
 
 const router = createBrowserRouter([
   {
@@ -14,6 +15,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Catalog /> },
       { path: "product/:slug", element: <Product /> },
+            { path: "advisor", element: <Advisor /> },
+
       { path: "admin", element: <Admin /> },
     ],
   },
