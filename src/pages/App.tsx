@@ -21,7 +21,12 @@ export default function App(){
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
             <input placeholder="Search model, CPU, GPU..." className="w-full bg-white/5 rounded-xl pl-9 pr-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20" onChange={(e)=>useStore.getState().setQuery(e.target.value)} />
           </div>
-          <Link to="/" className="ml-3 relative">
+      
+                <Link to="/advisor" className="ml-3 flex items-center gap-1 text-sm">
+        <span role="img" aria-label="Advisor">🤖</span>
+        Advisor
+      </Link>
+<Link to="/" className="ml-3 relative">
             <ShoppingCart />
             {cartCount>0 && <span className="absolute -right-2 -top-2 text-xs bg-green-400 text-black px-1.5 py-0.5 rounded">{cartCount}</span>}
           </Link>
