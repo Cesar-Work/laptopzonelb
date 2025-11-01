@@ -1,10 +1,11 @@
 // src/pages/Admin.tsx
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import { auth, db } from "@/lib/firebase"
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth"
 import {
   collection, addDoc, doc, updateDoc, getDoc, serverTimestamp
 } from "firebase/firestore"
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 import type { LaptopProduct, RamOption, StorageOption } from "@/types"
 
 export default function Admin() {
@@ -12,6 +13,10 @@ export default function Admin() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // upload state
+  const [uploadPct, setUploadPct] = useState(0)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const [form, setForm] = useState<Partial<LaptopProduct>>({
     brand: "Dell",
@@ -61,6 +66,72 @@ export default function Admin() {
     }
   }
   async function logout() { await signOut(auth) }
+
+  // === NEW: handle thumbnail file upload to Firebase Storage ===
+  async function handleThumbnailFile(e: ChangeEvent<HTMLInputElement>) {
+    try {
+      setUploadError(null)
+      setUploadPct(0)
+
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      if (!auth.currentUser) {
+        alert("You must sign in first.")
+        return
+      }
+      if (!isAdmin) {
+        alert(`You are signed in (UID ${auth.currentUser.uid}) but not an admin.
+Create Firestore doc: admins/${auth.currentUser.uid} = { active: true }`)
+        return
+      }
+
+      if (!file.type.startsWith("image/")) {
+        setUploadError("Please select an image file.")
+        return
+      }
+      const maxMB = 5
+      if (file.size > maxMB * 1024 * 1024) {
+        setUploadError(`Image is too large. Max ${maxMB}MB.`)
+        return
+      }
+
+      const storage = getStorage() // uses your initialized Firebase app
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg"
+      const safeSlug = String(form.slug || "no-slug")
+        .toLowerCase().replace(/[^a-z0-9\-]+/g, "-")
+      // user-scoped path; public read via Storage rules; good cache headers
+      const path = `uploads/${auth.currentUser.uid}/${Date.now()}_${safeSlug}.${ext}`
+      const storageRef = ref(storage, path)
+
+      const metadata = {
+        contentType: file.type,
+        cacheControl: "public, max-age=31536000, immutable",
+      }
+
+      const task = uploadBytesResumable(storageRef, file, metadata)
+
+      task.on(
+        "state_changed",
+        (snap) => {
+          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
+          setUploadPct(pct)
+        },
+        (err) => {
+          console.error("[upload] failed:", err)
+          setUploadError(err.message || "Upload failed")
+        },
+        async () => {
+          const url = await getDownloadURL(task.snapshot.ref)
+          setForm((f) => ({ ...f, thumbnail: url }))
+          setUploadPct(100)
+        }
+      )
+    } catch (err: any) {
+      console.error(err)
+      setUploadError(err.message || "Upload error")
+    }
+  }
 
   async function addProduct() {
     try {
@@ -155,9 +226,36 @@ Create Firestore doc: admins/${auth.currentUser.uid} = { active: true }`);
             <input type="number" className="bg-white/5 p-2 rounded"
               value={form.basePriceUSD || 0} onChange={(e) => setForm({ ...form, basePriceUSD: +e.target.value })} />
           </Field>
-          <Field label="Thumbnail (/assets/xxx.png or URL)">
-            <input className="bg-white/5 p-2 rounded"
-              value={form.thumbnail || ""} onChange={(e) => setForm({ ...form, thumbnail: e.target.value })} />
+
+          {/* === CHANGED: Thumbnail field with URL, file upload, progress, preview === */}
+          <Field label="Thumbnail (URL or upload)">
+            <div className="space-y-2">
+              <input
+                className="w-full bg-white/5 p-2 rounded"
+                placeholder="/assets/xxx.png or https://..."
+                value={form.thumbnail || ""}
+                onChange={(e) => setForm({ ...form, thumbnail: e.target.value })}
+              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailFile}
+                  className="bg-white/5 p-2 rounded"
+                />
+                {uploadPct > 0 && uploadPct < 100 && (
+                  <div className="text-xs opacity-70">{uploadPct}%</div>
+                )}
+                {uploadError && <div className="text-red-400 text-xs">{uploadError}</div>}
+              </div>
+              {form.thumbnail && (
+                <img
+                  src={form.thumbnail}
+                  alt="thumbnail preview"
+                  className="mt-2 h-24 w-24 object-cover rounded"
+                />
+              )}
+            </div>
           </Field>
         </div>
 
@@ -257,4 +355,3 @@ function normalizeOpt<T extends { sizeGB: any; priceDeltaUSD: any; available: an
     available: Boolean(o.available),
   }
 }
-
